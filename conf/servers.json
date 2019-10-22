@@ -1,0 +1,7 @@
+{
+  "Rancher-Home": {
+    "url": "http://rancher-home:2812",
+    "user": "admin",
+    "password": "admin"
+  }
+}

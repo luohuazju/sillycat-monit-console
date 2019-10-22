@@ -1,19 +1,65 @@
-import web
+#!/usr/bin/python
 
-render = web.template.render('templates/')
+import web
+import json
+import os
+import requests
+import xmltodict
+from collections import OrderedDict
+from operator import itemgetter
+import datetime
 
 urls = (
-  '/(.*)', 'index'
+  '/', 'Index'
 )
 
+app = web.application(urls, globals())
+render = web.template.render('templates/', base="layout")
 
-class index:
-  def GET(self, name):
-    return render.index(name)
+web.config.debug = False
 
 
+def getMonit():
+    result = []
+    xml_query = "/_status?format=xml"
+
+    with open('{0}/conf/servers.json'.format(os.path.expanduser('.'))) as f:
+        cf = json.loads(f.read())
+        for site in cf:
+            s = cf[site]
+            r = requests.get(s['url'] + xml_query,
+                       auth=(s['user'], s['password']))
+            allstat = json.loads(json.dumps(xmltodict.parse(r.text)['monit']))
+            services = allstat['service']
+            status = {}
+            checks = OrderedDict()
+            for service in services:
+                name = service['name']
+                status[name] = int(service['status'])
+                checks[name] = status[name]
+
+            sorted_checks = OrderedDict(sorted(checks.items(), key=itemgetter(1), reverse=True))
+            server = dict(name=site, url=s['url'], result=sorted_checks)
+            result.append(server)
+    print(datetime.datetime.now())
+    return result
+
+
+class MonitDashboard(web.application):
+
+    def run(self, port=8080, *middleware):
+        func = self.wsgifunc(*middleware)
+        return web.httpserver.runsimple(func, ('0.0.0.0', port))
+
+
+class Index(object):
+
+    def GET(self):
+        return render.index(output=getMonit(), now=datetime.datetime.now())
+
+# Main
 if __name__ == "__main__":
-  app = web.application(urls, globals())
-  app.run()
+    app = MonitDashboard(urls, globals())
+    app.run(port=1234)
 
 
